@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Collection Report Builder</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
+<style>
+:root{--bg:#f5f7fa;--panel:#fff;--bd:#d0d7de;--tx:#1f2328;--mu:#656d76;--ac:#1f6feb;--ok:#1a7f37;--err:#cf222e;--th:#e8eef5;--tot:#dff3e4;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0f1419;--panel:#161b22;--bd:#2a323c;--tx:#e6edf3;--mu:#8b949e;--ac:#4f8cff;--ok:#3fb950;--err:#f85149;--th:#1c2733;--tot:#1a2f22}}
+:root[data-theme="dark"]{--bg:#0f1419;--panel:#161b22;--bd:#2a323c;--tx:#e6edf3;--mu:#8b949e;--ac:#4f8cff;--ok:#3fb950;--err:#f85149;--th:#1c2733;--tot:#1a2f22}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--tx);font-family:'Segoe UI',Roboto,Arial,sans-serif;padding:24px 14px 60px}
+.wrap{max-width:1200px;margin:auto}h1{font-size:1.4rem;margin:0 0 4px}h2{font-size:1rem;margin:18px 0 8px}
+.sub,.note{color:var(--mu);font-size:.85rem}.note{font-size:.78rem;margin-top:8px;line-height:1.5}
+.panel{background:var(--panel);border:1px solid var(--bd);border-radius:12px;padding:18px;margin-bottom:18px}
+input[type=text]{background:var(--bg);border:1px solid var(--bd);color:var(--tx);border-radius:6px;padding:8px;width:280px;max-width:100%}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:12px}
+.slot{border:1.5px dashed var(--bd);border-radius:10px;padding:14px}.slot.filled{border:1.5px solid var(--ok)}
+.slot b{font-size:.88rem}.slot p{color:var(--mu);font-size:.75rem;margin:4px 0 8px}.slot input{width:100%;font-size:.78rem}
+.st{font-size:.78rem;color:var(--ok);margin-top:6px;min-height:1em}
+.btn{background:var(--ok);color:#fff;border:0;border-radius:8px;padding:10px 18px;font-weight:600;cursor:pointer}.btn.b2{background:var(--ac)}.btn:disabled{opacity:.4}
+#msg{font-size:.85rem;color:var(--mu);margin-left:10px}#msg.error{color:var(--err)}
+.row{margin:14px 0;display:flex;align-items:center;flex-wrap:wrap;gap:8px}
+.scroll{overflow-x:auto;border:1px solid var(--bd);border-radius:12px}
+table{border-collapse:collapse;width:100%;min-width:1100px;font-size:.82rem}
+th{background:var(--th);padding:7px 9px;border:1px solid var(--bd);white-space:nowrap}td{padding:6px 9px;border:1px solid var(--bd);text-align:right;font-variant-numeric:tabular-nums}
+td:first-child{text-align:left}tr.gt td{background:var(--tot);font-weight:700}#res{display:none}
+</style></head><body><div class="wrap">
+<h1>Collection Report Builder</h1>
+<div class="sub">CSV ya XLS/XLSX dono upload kar sakte ho → Collection Report Excel download karo.</div>
+<div class="panel">
+<h2 style="margin-top:0">1. Collector IDs</h2>
+<input type="text" id="ids" value="40003813, 40003144">
+<h2>2. Files upload karo</h2>
+<div class="grid">
+<div class="slot" id="s-daily"><b>Daily Collection (optional)</b><p>MIS_Daily_Collection...csv — na ho to chhod do</p><input type="file" id="f-daily" accept=".csv"><div class="st" id="t-daily"></div></div>
+<div class="slot" id="s-hw"><b>HeadWise Collection Report</b><p>.csv / .xls / .xlsx</p><input type="file" id="f-hw" accept=".csv,.xls,.xlsx"><div class="st" id="t-hw"></div></div>
+<div class="slot" id="s-sp"><b>Smart Prepaid Report(s)</b><p>.csv / .xls / .xlsx — multiple select ho sakte hain</p><input type="file" id="f-sp" accept=".csv,.xls,.xlsx" multiple><div class="st" id="t-sp"></div></div>
+</div>
+<div class="row"><button class="btn" id="go" onclick="run()">Build Report</button><span id="msg"></span></div>
+</div>
+<div id="res">
+<div class="row"><button class="btn b2" id="dl" onclick="download()">⬇ Download Collection Report</button></div>
+<div class="scroll"><table><thead>
+<tr><th rowspan="3">DATE</th><th colspan="9">Collection</th><th colspan="4">Deposite</th><th rowspan="3">Temporary</th><th rowspan="3">Total Collection<br>(ID-wise)</th><th rowspan="3">Balance</th></tr>
+<tr><th colspan="2">ENERGY BILL</th><th colspan="2">Smart Prepaid</th><th rowspan="2">Assessment</th><th rowspan="2">RC/DC</th><th rowspan="2">Meter Cost</th><th rowspan="2">Misc</th><th rowspan="2">Total</th><th rowspan="2">Rev Ac</th><th rowspan="2">RC/DC AC</th><th rowspan="2">DW AC</th><th rowspan="2">Total</th></tr>
+<tr><th>cash</th><th>Cheque</th><th>cash</th><th>Cheque</th></tr></thead><tbody id="tb"></tbody></table></div>
+<div class="note">Temporary = Temporary Energy Charge + Meter Cost entries of exactly ₹2,400/₹6,000 (HeadWise). Total Collection (ID-wise) = Daily Collection (sab bill types) + Smart Prepaid (sab modes). Balance = Total Collection − (Collection Total + Temporary). Daily upload na karo to Balance sirf Smart Prepaid se banega (isliye negative aa sakta hai). Slash wali dates (08/10/2026) DD/MM/YYYY maani gayi hain.</div>
+</div></div>
+<script>
+let data=null,raw={};
+const p2=n=>String(n).padStart(2,'0');
+const setMsg=(m,e)=>{const x=document.getElementById('msg');x.textContent=m;x.className=e?'error':''};
+const ids=()=>document.getElementById('ids').value.split(',').map(s=>s.trim()).filter(Boolean);
+function dkey(v){
+  if(v==null||v==='')return null;
+  if(typeof v==='number'){const d=XLSX.SSF.parse_date_code(v);return d?d.y+'-'+p2(d.m)+'-'+p2(d.d):null}
+  if(v instanceof Date)return v.getFullYear()+'-'+p2(v.getMonth()+1)+'-'+p2(v.getDate());
+  const s=String(v).trim();let m=s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if(m)return m[1]+'-'+p2(m[2])+'-'+p2(m[3]);
+  m=s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/);          // DD/MM/YYYY
+  return m?m[3]+'-'+p2(m[2])+'-'+p2(m[1]):null;
+}
+const toDate=k=>{const[a,b,c]=k.split('-').map(Number);return new Date(Date.UTC(a,b-1,c))};
+// Reads CSV (Papa) or Excel (SheetJS) into array of sheets: [{name, rows}]
+async function readAny(f){
+  if(/\.csv$/i.test(f.name)){
+    const t=await f.text();
+    return[{name:'Sheet1',rows:Papa.parse(t,{header:false,skipEmptyLines:true}).data}];
+  }
+  const wb=XLSX.read(await f.arrayBuffer(),{type:'array'});
+  return wb.SheetNames.map(n=>({name:n,rows:XLSX.utils.sheet_to_json(wb.Sheets[n],{header:1,raw:true,defval:null})}));
+}
+// Find column index by header name (case-insensitive); fallback to given index
+function col(h,names,fb){
+  const hh=(h||[]).map(x=>String(x==null?'':x).trim().toLowerCase());
+  for(const n of names){const i=hh.indexOf(n);if(i>=0)return i}
+  return fb;
+}
+const num=v=>{const n=typeof v==='number'?v:parseFloat(v);return isNaN(n)?0:n};
+const add=(o,k,v)=>{o[k]=(o[k]||0)+v};
+
+async function run(){
+  setMsg('');
+  const fd=document.getElementById('f-daily').files[0],fh=document.getElementById('f-hw').files[0],fs=document.getElementById('f-sp').files;
+  if(!fh||!fs.length){setMsg('HeadWise aur kam se kam ek Smart Prepaid file zaroor upload karo.',true);return}
+  const T=new Set(ids());if(!T.size){setMsg('Collector ID daalo.',true);return}
+  document.getElementById('go').disabled=true;setMsg('Processing...');
+  raw={daily:null,hw:[],sp:[]};
+  try{
+    const en={},as={},rd={},rawT={},mc={},rh={},ms={},ex={},sc={},sch={};
+    // 1. Daily (optional)
+    if(fd){
+      const rows=(await readAny(fd))[0].rows;raw.daily=rows;
+      for(let i=1;i<rows.length;i++){const r=rows[i];if(r.length<10)continue;
+        const cid=String(r[8]||'').trim();if(!T.has(cid))continue;const k=dkey(r[1]);if(!k)continue;
+        const c=num(r[2]),q=num(r[3]);
+        add(rawT,k,c+q+num(r[4])+num(r[5])+num(r[6])+num(r[7]));
+        const bt=String(r[9]||'').trim();
+        if(bt==='ENERGY BILL'){en[k]=en[k]||{c:0,q:0};en[k].c+=c;en[k].q+=q}
+        else if(bt==='FINAL ASSESSMENT BILL')add(as,k,c+q);
+        else if(bt==='DISCONNECTION RECONNECTION CHARGE')add(rd,k,c+q);}
+      document.getElementById('t-daily').textContent=(rows.length-1)+' rows read';
+    }
+    // 2. HeadWise
+    const RC=new Set(['DISCONNECTION RECONNECTION CHARGE','NEW SERVICE CONNECTION DISCONNECTION CHARGE']);
+    let hn=0;
+    for(const s of await readAny(fh)){
+      raw.hw.push(s);const h=s.rows[0];
+      const ih=col(h,['bill head'],6),ia=col(h,['amount'],7),id=col(h,['payment date'],8),ir=col(h,['received by'],9);
+      for(let i=1;i<s.rows.length;i++){const r=s.rows[i];if(!r)continue;
+        const head=r[ih]?String(r[ih]).trim():null,amt=num(r[ia]),k=dkey(r[id]),by=r[ir]?String(r[ir]).trim():null;
+        if(!head||!k||!by||!T.has(by))continue;hn++;
+        if(head==='TEMPORARY SERVICE CONNECTION ENERGY CHARGE'){add(ex,k,amt);continue}
+        if(head.includes('METER COST')){if(amt===2400||amt===6000){add(ex,k,amt);continue}add(mc,k,amt)}
+        else if(RC.has(head))add(rh,k,amt);else add(ms,k,amt);}
+    }
+    document.getElementById('t-hw').textContent=hn+' matching rows';
+    // 3. Smart Prepaid
+    let sn=0;
+    for(const f of fs)for(const s of await readAny(f)){
+      raw.sp.push(s);const h=s.rows[0];
+      const im=col(h,['payment mode'],2),ia=col(h,['amount'],3),id=col(h,['payment date'],4),ic=col(h,['collector id'],10);
+      for(let i=1;i<s.rows.length;i++){const r=s.rows[i];if(!r)continue;
+        const mode=r[im]?String(r[im]).trim():null,k=dkey(r[id]),cid=r[ic]?String(r[ic]).trim():null;
+        if(!mode||!k||!cid||!T.has(cid))continue;const a=num(r[ia]);sn++;
+        add(rawT,k,a);
+        if(mode==='cash'||mode==='cash_os')add(sc,k,a);else if(mode==='cheque')add(sch,k,a);}
+    }
+    document.getElementById('t-sp').textContent=sn+' matching rows';
+    const keys=[...new Set([en,as,rd,mc,rh,ms,ex,sc,sch,rawT].flatMap(o=>Object.keys(o)))].sort();
+    if(!keys.length){setMsg('In Collector IDs ka koi data nahi mila. IDs aur files check karo.',true);return}
+    const rows=[];let cur=toDate(keys[0]);const end=toDate(keys[keys.length-1]);
+    while(cur<=end){
+      const k=cur.getUTCFullYear()+'-'+p2(cur.getUTCMonth()+1)+'-'+p2(cur.getUTCDate());
+      const eC=(en[k]||{}).c||0,eQ=(en[k]||{}).q||0,spC=sc[k]||0,spQ=sch[k]||0,a=as[k]||0,rcdc=(rd[k]||0)+(rh[k]||0),m=mc[k]||0,mi=ms[k]||0;
+      const total=eC+eQ+spC+spQ+a+rcdc+m+mi,rawC=rawT[k]||0,e=ex[k]||0;
+      rows.push({date:new Date(cur),eC,eQ,spC,spQ,a,rcdc,m,mi,total,rev:eC+eQ+a+spC+spQ,rcA:rcdc,dw:m+mi,e,rawC,bal:rawC-(total+e)});
+      cur=new Date(cur.getTime()+864e5);
+    }
+    data=rows;render(rows);setMsg('Done — '+rows.length+' day(s) processed.');
+  }catch(err){console.error(err);setMsg('Error: '+err.message,true)}
+  finally{document.getElementById('go').disabled=false}
+}
+const fmt=n=>Math.round(n||0).toLocaleString('en-IN');
+const KEYS=['eC','eQ','spC','spQ','a','rcdc','m','mi','total','rev','rcA','dw','total','e','rawC','bal'];
+function render(rows){
+  const g={};let h='';
+  for(const r of rows){
+    new Set(KEYS).forEach(k=>g[k]=(g[k]||0)+r[k]);
+    h+='<tr><td>'+r.date.toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'2-digit',timeZone:'UTC'})+'</td>'+KEYS.map(k=>'<td>'+fmt(r[k])+'</td>').join('')+'</tr>';
+  }
+  h+='<tr class="gt"><td>TOTAL</td>'+KEYS.map(k=>'<td>'+fmt(g[k])+'</td>').join('')+'</tr>';
+  document.getElementById('tb').innerHTML=h;document.getElementById('res').style.display='block';
+}
+function dump(wb,name,rows){
+  if(!rows||!rows.length)return;
+  const ws=wb.addWorksheet(name.substring(0,31));
+  ws.addRows(rows.map(r=>Array.isArray(r)?r.map(c=>c===undefined?null:c):[r]));
+  ws.getRow(1).font={bold:true};ws.views=[{state:'frozen',ySplit:1}];
+}
+async function download(){
+  if(!data)return;const btn=document.getElementById('dl');btn.disabled=true;btn.textContent='Building file...';
+  await new Promise(r=>setTimeout(r,0));
+  try{
+    const wb=new ExcelJS.Workbook(),ws=wb.addWorksheet('Collection Report'),N=17,F='#,##0';
+    const bd={top:{style:'thin'},left:{style:'thin'},bottom:{style:'thin'},right:{style:'thin'}};
+    ['A1:A3','B1:J1','K1:N1','O1:O3','P1:P3','Q1:Q3','B2:C2','D2:E2',...'FGHIJKLMN'.split('').map(c=>c+'2:'+c+'3')].forEach(r=>ws.mergeCells(r));
+    const H={A1:'DATE',B1:'Collection',K1:'Deposite',O1:'Temporary',P1:'Total Collection (ID-wise)',Q1:'Balance',B2:'ENERGY BILL',D2:'Smart Prepaid',F2:'Assessment',G2:'RC/DC',H2:'Meter Cost',I2:'Misc',J2:'Total',K2:'Rev Ac',L2:'RC/DC AC',M2:'DW AC',N2:'Total',B3:'cash',C3:'Cheque',D3:'cash',E3:'Cheque'};
+    for(const k in H)ws.getCell(k).value=H[k];
+    for(let r=1;r<=3;r++)for(let c=1;c<=N;c++){const x=ws.getRow(r).getCell(c);x.font={bold:true,color:{argb:'FFFFFFFF'}};x.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FF1C2733'}};x.alignment={horizontal:'center',vertical:'middle',wrapText:true};x.border=bd}
+    ws.columns=Array.from({length:N},(_,i)=>({width:i===15?18:12}));
+    let r=4;const first=4;
+    for(const w of data){
+      const d=w.date,row=ws.getRow(r);
+      row.getCell(1).value=p2(d.getUTCDate())+'-'+p2(d.getUTCMonth()+1)+'-'+d.getUTCFullYear();
+      [w.eC,w.eQ,w.spC,w.spQ,w.a,w.rcdc,w.m,w.mi].forEach((v,i)=>row.getCell(2+i).value=Math.round(v));
+      row.getCell(10).value={formula:`SUM(B${r}:I${r})`};
+      row.getCell(11).value=Math.round(w.rev);row.getCell(12).value=Math.round(w.rcA);row.getCell(13).value=Math.round(w.dw);
+      row.getCell(14).value={formula:`SUM(K${r}:M${r})`};
+      row.getCell(15).value=Math.round(w.e);row.getCell(16).value=Math.round(w.rawC);
+      row.getCell(17).value={formula:`P${r}-(J${r}+O${r})`};
+      for(let c=1;c<=N;c++){const x=row.getCell(c);x.border=bd;if(c>1){x.numFmt=F;x.alignment={horizontal:'right'}}else x.alignment={horizontal:'center'}}
+      r++;
+    }
+    const last=r-1,t=ws.getRow(r);t.getCell(1).value='TOTAL';
+    'BCDEFGHIKLMOPQ'.split('').forEach(c=>t.getCell(c).value={formula:`SUM(${c}${first}:${c}${last})`});
+    t.getCell('J').value={formula:`SUM(B${r}:I${r})`};t.getCell('N').value={formula:`SUM(K${r}:M${r})`};
+    for(let c=1;c<=N;c++){const x=t.getCell(c);x.font={bold:true};x.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FFCFEFD7'}};x.border=bd;if(c>1){x.numFmt=F;x.alignment={horizontal:'right'}}}
+    ws.views=[{state:'frozen',ySplit:3,topLeftCell:'A4'}];
+    dump(wb,'Daily Collection',raw.daily);
+    raw.hw.forEach((s,i)=>dump(wb,raw.hw.length>1?'HeadWise_'+s.name:'HeadWise',s.rows));
+    // all Smart Prepaid files/sheets combined into one sheet, repeated header rows dropped
+    let sp=[],hd=null;
+    for(const s of raw.sp){if(!s.rows.length)continue;
+      if(!hd){hd=s.rows[0];sp=sp.concat(s.rows)}
+      else{const same=hd.every((v,i)=>String(v??'').trim().toLowerCase()===String(s.rows[0][i]??'').trim().toLowerCase());sp=sp.concat(same?s.rows.slice(1):s.rows)}}
+    dump(wb,'SP1',sp);
+    const buf=await wb.xlsx.writeBuffer(),a=document.createElement('a');
+    a.href=URL.createObjectURL(new Blob([buf]));
+    const M=['January','February','March','April','May','June','July','August','September','October','November','December'];
+    a.download='Collection Report - '+M[data[0].date.getUTCMonth()]+' '+data[0].date.getUTCFullYear()+'.xlsx';
+    document.body.appendChild(a);a.click();a.remove();
+  }catch(e){console.error(e);alert('Excel error: '+e.message)}
+  finally{btn.disabled=false;btn.textContent='⬇ Download Collection Report'}
+}
+[['f-daily','s-daily'],['f-hw','s-hw'],['f-sp','s-sp']].forEach(([f,s])=>document.getElementById(f).addEventListener('change',function(){document.getElementById(s).classList.toggle('filled',this.files.length>0)}));
+</script></body></html>
